@@ -182,7 +182,7 @@ void gen(RORNODE* graph) {
     //}
 }
 
-int rorng_main() {
+int main() {
 
 	clock_t start = clock();
 
