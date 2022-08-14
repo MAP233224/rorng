@@ -29,10 +29,9 @@ enum NODE_STATE {
 
 /* CONSTANTS */
 
-#define BITS      (6)                        //current max is 8 because path is made of u8, but should become 63 (implying u64 NODES_MAX)
+#define BITS      (6)                        //current max is 8 because path is made of u8, but should become u32
 #define NODES_MAX (1ULL << BITS)             //number of nodes
-#define PATHS_MAX (1ULL << (NODES_MAX >> 1)) //number of unique paths taken from 0 to 1 in the graph (conjectured)
-#define FOUND_MAX (256)                      //number of unique sequences found (arbitrary)
+#define PATHS_MAX (1ULL << (NODES_MAX >> 1)) //total number of unique paths taken from 0 to 1 in the graph (conjectured)
 
 /* MACROS */
 
@@ -41,7 +40,7 @@ enum NODE_STATE {
 
 /* GLOBALS */
 
-u32 seqs[FOUND_MAX][NODES_MAX] = { 0 };
+u32 paths[256][NODES_MAX] = { 0 }; //256 because I don't care about generating more
 
 /* FUNCTIONS */
 
@@ -110,7 +109,17 @@ void make_graph(RORNODE* graph) {
     }
 }
 
-void make_seqs(RORNODE* graph) {
+u64 make_seq(u8* path) {
+    /**/
+    u64 seq = 0;
+    for (u32 i = 0; i < NODES_MAX; i++)
+    {
+        seq |= (u64)path[i] << i;
+    }
+    return seq;
+}
+
+void gen(RORNODE* graph) {
     /* Generate sequences with the nodes approach */
 
     //you must traverse the graph from 0 back to itself and visit all nodes in exactly NODES_MAX steps
@@ -118,60 +127,70 @@ void make_seqs(RORNODE* graph) {
     //nb: always starting by checking the next "one" node will NEVER make you backtrack
     //nb: graph[j].self == j
 
-    u8 hit[NODES_MAX] = { 0 }; //collision checker
-    u8 seq[NODES_MAX] = { 0 }; //path traveled through the graph
-    u32 p = 1; //path index
-    u32 g = 1; //graph index
+    u8 h[NODES_MAX] = { 0 }; //collision checker, init zero node as visited
+    u8 path[NODES_MAX] = { 0 }; //path traveled through the graph
+    u32 i = 1; //path index
+    u32 j = 1; //graph index
 
-    /* Init collisions: all nodes are free except 0 which always takes its ONE branch */
-    memset(hit, NODE_FREE, sizeof(hit));
-    hit[0] = NODE_TOOK_ONE;
+    memset(h, NODE_FREE, sizeof(h));
+    h[0] = NODE_TOOK_ONE;
 
-    while (p && p < NODES_MAX)
+    while (i && i < NODES_MAX)
     {
         //todo: generate multiple seq, not just one
         //todo: manage priority, check ZERO or ONE first?
         //todo: clean up duplicate code
 
-        if (hit[g] != NODE_FORB_ZERO && hit[graph[g].zero] == NODE_FREE) //if branch zero of current node is free
+        if (h[j] != NODE_FORB_ZERO && h[graph[j].zero] == NODE_FREE) //if branch zero of current node is free
         {
-            seq[p] = graph[g].zero; //set path
-            g = seq[p]; //new node
-            hit[g] = NODE_TOOK_ZERO; //mark as visited
-            p++; //advance
+            path[i] = graph[j].zero; //set path
+            j = path[i]; //new node
+            h[j] = NODE_TOOK_ZERO; //mark as visited
+            i++; //advance
             continue;
         }
 
-        if (hit[g] != NODE_FORB_ONE && hit[graph[g].one] == NODE_FREE) //else if branch one of current node is free
+        if (h[j] != NODE_FORB_ONE && h[graph[j].one] == NODE_FREE) //else if branch one of current node is free
         {
-            seq[p] = graph[g].one; //set path
-            g = seq[p]; //new node
-            hit[g] = NODE_TOOK_ONE; //set as visited
-            p++; //advance
+            path[i] = graph[j].one; //set path
+            j = path[i]; //new node
+            h[j] = NODE_TOOK_ONE; //set as visited
+            i++; //advance
             continue;
         }
 
         /* BACKTRACK */
-        u32 branch = hit[g]; //took one or zero?
-        hit[g] = NODE_FREE; //set current node as free
-        p--; //go back once in the path
-        g = seq[p - 1]; //go back twice in the graph
-        hit[g] = branch | NODE_FORBIDDEN; //set taken branch as forbidden
+        u32 branch = h[j]; //took one or zero?
+        h[j] = NODE_FREE; //set current node as free
+        i--; //go back once in the path
+        j = path[i - 1]; //go back twice in the graph
+        h[j] = branch | NODE_FORBIDDEN; //set one or zero branch as forbidden
     }
 
-    print_seq(seq);
-    print_seq_bits(seq);
+    print_seq(path);
+    print_seq_bits(path);
+    //print_path(path);
+
+    //seq = make_seq(path);
+
+    /* test all permutations of this seq */
+    //for (u32 k = 0; k < NODES_MAX; k++)
+    //{
+        //printf("%016llx (%u)\n", seq, test_period(seq));
+        //print_bits(seq, sizeof(seq));
+    //    seq = ROR(seq, 1);
+    //}
 }
 
-int main(void) {
+int main() {
 
 	clock_t start = clock();
 
 
     RORNODE graph[NODES_MAX] = { 0 };
-	printf("Generating %u-bit period (%llu-bit ROR value):\n\n", BITS, NODES_MAX);
+	printf("Generating %u-bit sequence (%u-bit number):\n\n", BITS, NODES_MAX);
     make_graph(graph);
-    make_seqs(graph);
+    gen(graph);
 	
 
 	printf("Time: %u ms.\n", clock() - start);
